@@ -1,0 +1,78 @@
+###############################################################################################################
+################## This is a pipeline to run NUMT Calling using the Wei et. al 2022 Pipeline ##################
+################## and filter out NUMT associated reads. ######################################################
+###############################################################################################################
+
+##### Input should be list of bam file names or IDs ######################
+##### These are full bam files aligned to hg38(not chrM reads only) ######
+##### Write a script to generate this for your samples ###################
+
+INPUT_ID="XXVVFF"
+
+
+# These files should be output for the full pipeline
+rule all:
+        input:
+                expand("../NUMT_results/{SAMPLE_ID}_calling_finished.txt", SAMPLE_ID = INPUT_ID),
+                expand("../filtered_bams/{SAMPLE_ID}_numt_read_removal_summary.txt", SAMPLE_ID = INPUT_ID),
+                expand("../filtered_bams/{SAMPLE_ID}.chrM.sorted.bam", SAMPLE_ID = INPUT_ID),
+                expand("../exclusion_beds/{SAMPLE_ID}_bed_finished.txt", SAMPLE_ID = INPUT_ID),
+                expand("../filtered_bams/{SAMPLE_ID}_no_NUMT_reads.bam", SAMPLE_ID = INPUT_ID)
+
+# First run the NUMT script from Wei et. al 2022
+checkpoint run_NUMT_array_job:
+        input:
+                bam="../samples/{SAMPLE_ID}.bam"
+        output:
+                "../NUMT_results/{SAMPLE_ID}_calling_finished.txt"
+        params:
+        threads:28
+        conda:  "../envs/NUMT_Calling_ENV.yml"
+        shell:
+                '''
+                ./NUMT_calling.sh {input.bam}
+                '''
+
+# Next run the rule to get bams with only chrM reads
+rule subset_chrM_reads:
+        input:
+                bam="../samples/{SAMPLE_ID}.bam"
+        output:
+                "../filtered_bams/{SAMPLE_ID}.chrM.sorted.bam"
+        params:
+        threads: 16
+        conda:  "../envs/NUMT_Filtering_ENV.yml"
+        shell:
+                '''
+                ./chrM_subset.sh {input.bam}
+                '''
+
+# Now filter out NUMT reads generated from run_NUMT_array_job from bams with only chrM reads 
+rule filter_reads:
+        input:
+                "../NUMT_results/{SAMPLE_ID}_calling_finished.txt",
+                chrM_bam="../filtered_bams/{SAMPLE_ID}.chrM.sorted.bam"
+        output:
+                "../filtered_bams/{SAMPLE_ID}_no_NUMT_reads.bam",
+                "../filtered_bams/{SAMPLE_ID}_numt_read_removal_summary.txt"
+        params:
+        threads: 16
+        conda:  "../envs/NUMT_Filtering_ENV.yml"
+        shell:
+                '''
+                ./NUMT_filtering.sh {input.chrM_bam}
+                '''
+# Lastly identify NUMT regions > 2*mean_read_length+insert_size that will be excluded from chrM VCF files after variant calling
+rule identify_regions:
+        input:
+                "../NUMT_results/{SAMPLE_ID}_calling_finished.txt",
+                chrM_bam="../filtered_bams/{SAMPLE_ID}.chrM.sorted.bam"
+        output:
+                "../exclusion_beds/{SAMPLE_ID}_bed_finished.txt"
+        params:
+        threads:1
+        conda:  "../envs/NUMT_Filtering_ENV.yml"
+        shell:
+                '''
+                ./Generate_exclusion_beds.sh {input.chrM_bam}
+                '''
