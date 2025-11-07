@@ -10,7 +10,7 @@
 
 INPUT_BAM=$1 # Input WGS bam file
 OUTPUT_DIR="../NUMT_results" # output folder path
-REF_GRCh38="/restricted/projectnb/icamp/gtex/GenomeResearchReviews/NUMTs_detection/modified_codes/Homo_sapiens_assembly38.fasta" # human reference genome (downloaded from GATK)
+REF_GRCh38="/PATH/TO/GRCH38/REFERENCE/FASTA" # human reference genome (downloaded from GATK)
 
 # These python scripts are called in the pipeline
 CLUSTER_SCRIPT='./searchNumtCluster_fromDiscordantReads.py'
