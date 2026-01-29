@@ -26,9 +26,9 @@ module load samtools/1.9
 module load picard/2.25.2
 
 ## MODIFY ## Location of bam files
-bam_dir='/restricted/projectnb/icamp/gtex_all_tissues/2024_NUMT_Filtering_Scripts/test_NUMT_read_filtering/original_bams'
+bam_dir='BAMPATH'
 ## MODIFY ## Location of NUMT directory for sample
-numt_dir='/restricted/projectnb/icamp/gtex/blood_WGS/bam2'
+numt_dir='NUMTPATH'
 ## MODIFY ## Read Length
 read_length=150
 
