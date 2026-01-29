@@ -19,7 +19,7 @@ cp -r ./* $DESTINATION_DIRECTORY
 '''shell
 conda env create -f ./envs/snakemake_base_ENV.yml
 conda activate snakemake_base_ENV
-```
+'''
 3) Add your bam files to samples directory.
 (would probably be easier to change ./samples to current location of your bam files if you have a lot of files.
 In order to do this change input file paths in scripts - I can add this for the next version)
