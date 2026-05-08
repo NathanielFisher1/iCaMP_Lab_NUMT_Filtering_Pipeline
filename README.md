@@ -17,16 +17,22 @@ cp -r ./* $DESTINATION_DIRECTORY
 ```
 2) Create and activate base conda environment.
 '''shell
-conda env create -f ./envs/snakemake_base_ENV.yml
-conda activate snakemake_base_ENV
+conda env create -f ./envs/snakemake_base.yml
+conda activate snakemake_base
 '''
+
 3) Add your bam files to samples directory.
 (would probably be easier to change ./samples to current location of your bam files if you have a lot of files.
 In order to do this change input file paths in scripts - I can add this for the next version)
 ```shell
 cp $BAM_SOURCE_DIR/*.bam ./samples
 ```
-4) Run the pipeline:
+
+4) Add path to nuclear reference in lin 13 of scripts/NUMT_calling.sh 
+
+5) Current pipeline is for 150 bp reads - can adjust and modify parameters in line 50 of scripts/NUMT_calling.sh for different read sizes and inputs to blat.
+
+6) Run the pipeline:
 ```shell
 # Go to scripts directory
 cd scripts
