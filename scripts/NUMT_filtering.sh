@@ -40,8 +40,7 @@ if [ -e "$bam_file" ]; then
     echo "Number of discordant reads identified: $(wc -l < ${numt_dir}${sampid}.disc_to_rm.txt)" >> "${filtered_bam_dir}/${sampid}_numt_read_removal_summary.txt"
     echo "Number of split reads identified: $(wc -l < ${numt_dir}${sampid}.split_to_rm.txt)" >> "${filtered_bam_dir}/${sampid}_numt_read_removal_summary.txt"
     echo "Number of pblat reads identified: $(wc -l < ${numt_dir}${sampid}.pblat_to_rm.txt)" >> "${filtered_bam_dir}/${sampid}_numt_read_removal_summary.txt"
-    echo "Note: Not all identified split, discordant, and pblat reads map to chrM initially, so only those that do are removed." >> "${filtered_bam_dir}/${sampid}_numt_read_r
-emoval_summary.txt"
+    echo "Note: Not all identified split, discordant, and pblat reads map to chrM initially, so only those that do are removed." >> "${filtered_bam_dir}/${sampid}_numt_read_removal_summary.txt"
     
     # remove intermediate files
     rm -f ${numt_dir}${sampid}.disc_to_rm.txt ${numt_dir}${sampid}.split_to_rm.txt ${numt_dir}${sampid}.pblat_to_rm.txt ${numt_dir}${sampid}.remove_list.txt
