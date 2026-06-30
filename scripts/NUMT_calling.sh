@@ -1,50 +1,62 @@
 #!/bin/bash 
-##################################################################################################
-## Thus script removes discordant, split and pblat associated reads from aligned WGS bam files  ##
-## Before running this script you need to run the NUMT identification pipeline                  ##
-##################################################################################################
-##################################
-## Version 3.0 ###################
-##################################
-## MODIFY ## Location of NUMT directory for sample
-numt_dir='../NUMT_results/'               
-bam_dir='../samples/'
-filtered_bam_dir='../filtered_bams/'
-# Get bam file from stdin
-bam_file=$1
-# Check if file exists 
-if [ -e "$bam_file" ]; then
-    echo "Processing $bam_file"
-    # Get NUMT directory name from bam file name based on subj
-    sampid_temp="${bam_file##*/}"
-    sampid=${sampid_temp%.chrM.sorted.bam}                                                                                                       
-    #make text file of all discordant, split, and pblat associated reads to remove
-    #discordant reads
-    samtools view -@ 16 "${numt_dir}${sampid}.mt.disc.sam" | cut -f1 | sort -u > ${numt_dir}${sampid}.disc_to_rm.txt
-    #split reads
-    samtools view -@ 16 "${numt_dir}/${sampid}.mt.split.sam"| cut -f1 | sort -u > ${numt_dir}${sampid}.split_to_rm.txt
-    #pblat associated reads (this theoretically should not matter since pblat reads don't map initially to chrM, but somehow some do)
-    cat ${numt_dir}${sampid}*.psl | grep 'chrM' | awk '{print $10}' > ${numt_dir}${sampid}.pblat_to_rm.txt
-    cat ${numt_dir}${sampid}.disc_to_rm.txt ${numt_dir}${sampid}.split_to_rm.txt ${numt_dir}${sampid}.pblat_to_rm.txt \
-    > ${numt_dir}${sampid}.remove_list.txt
-    #remove all NUMT-associated reads
-    samtools view -@ 16 ${bam_file} -N ${numt_dir}${sampid}.remove_list.txt -U "${filtered_bam_dir}/${sampid}_no_NUMT_reads.bam"
-    samtools index -@ 16 "${filtered_bam_dir}/${sampid}_no_NUMT_reads.bam"
-    #calculate the number of reads removed and write to a summary file
-    input_len=$(samtools view -c < "$bam_file")
-    output_len=$(samtools view -c < "${filtered_bam_dir}/${sampid}_no_NUMT_reads.bam")
-    dif=$((input_len - output_len))
-    echo "$dif NUMT associated reads removed from $sampid" > "${filtered_bam_dir}/${sampid}_numt_read_removal_summary.txt"
-    echo "Number of reads in original bam: $input_len" >> "${filtered_bam_dir}/${sampid}_numt_read_removal_summary.txt"
-    echo "Number of reads in filtered bam: $output_len" >> "${filtered_bam_dir}/${sampid}_numt_read_removal_summary.txt"
-    echo "Number of discordant reads identified: $(wc -l < ${numt_dir}${sampid}.disc_to_rm.txt)" >> "${filtered_bam_dir}/${sampid}_numt_read_removal_summary.txt"
-    echo "Number of split reads identified: $(wc -l < ${numt_dir}${sampid}.split_to_rm.txt)" >> "${filtered_bam_dir}/${sampid}_numt_read_removal_summary.txt"
-    echo "Number of pblat reads identified: $(wc -l < ${numt_dir}${sampid}.pblat_to_rm.txt)" >> "${filtered_bam_dir}/${sampid}_numt_read_removal_summary.txt"
-    echo "Note: Not all identified split, discordant, and pblat reads map to chrM initially, so only those that do are removed." >> "${filtered_bam_dir}/${sampid}_numt_read_r
-emoval_summary.txt"
-    
-    # remove intermediate files
-    rm -f ${numt_dir}${sampid}.disc_to_rm.txt ${numt_dir}${sampid}.split_to_rm.txt ${numt_dir}${sampid}.pblat_to_rm.txt ${numt_dir}${sampid}.remove_list.txt
-else
-    echo "File not found: $bam_file"
-fi
+
+################################################################################
+## This script detects NUMTs from whole genome sequencing BAM files
+## samtools, samblaster and blat need to be installed to run the pipeline
+## samtools can be downloaded at http://www.htslib.org/download/
+## samblaster can be downloaded at https://github.com/GregoryFaust/samblaster
+## blat can be downloaded at http://hgdownload.soe.ucsc.edu/admin/exe/
+################################################################################
+
+INPUT_BAM=$1 # Input WGS bam file
+OUTPUT_DIR="../NUMT_results" # output folder path
+REF_GRCh38="/restricted/projectnb/icamp/gtex/GenomeResearchReviews/NUMTs_detection/modified_codes/Homo_sapiens_assembly38.fasta" # human reference genome (downloaded from GATK)
+
+# These python scripts are called in the pipeline
+CLUSTER_SCRIPT='./searchNumtCluster_fromDiscordantReads.py'
+BREAKPOINT_SCRIPT='./searchBreakpoint_fromblatoutputs.py'
+
+# Define sampleid and file variables
+SAMPLE_ID1="${INPUT_BAM##*/}" #removes everything in file path to the last slash
+SAMPLE_ID2=${SAMPLE_ID1%.bam}  # '%' removes the file name
+OUTPUT="${OUTPUT_DIR}/${SAMPLE_ID2}" #new output path in orginal output directory based on sample ID
+OUTPUT2="${OUTPUT_DIR}/${SAMPLE_ID2}"
+INPUT_DISC="${OUTPUT}.mt.disc.sam"
+INPUT_SPLIT="${OUTPUT}.mt.split.sam" 
+
+# Filter input bam for only chrM reads and then use samblaster to generate discorant and split chrM reads
+samtools view -@ 28 -m 10G -h -F 2 $INPUT_BAM | grep -e @ -e MT -e chrM | samtools sort -@ 16 -n  | samtools view -h | samblaster --ignoreUnmated -e -d $INPUT_DISC -s $INPUT_SPLIT -o /dev/null
+
+# Run python script to determine approximate genome coordinates of NUMTs based on presence discordant reads pairs (min 5 to define a cluster)
+python3 $CLUSTER_SCRIPT ${SAMPLE_ID2} ${INPUT_BAM} ${INPUT_DISC}
+echo "look for cluster's done, move to look for breakpoints"
+
+# This takes the input to Breakpoints and generates a multifasta fule of all reads for each NUMT region
+# Each read in the multifasta is then blatted against the GRCh38 reference and the .psl outputs of the blat 
+# are read into the breakpoint python script to identify breakpoints
+while read line; do
+    echo $line
+    INPUT_Dis="$(echo $line | cut -d ' ' -f 3)"
+    INPUT_Split="$(echo $line | cut -d ' ' -f 4)"
+    INPUT_WGS="$(echo $line | cut -d ' ' -f 5)"
+    CHR="$(echo $line | cut -d ' ' -f 6)"
+    START="$(echo $line | cut -d ' ' -f 7)"
+    END="$(echo $line | cut -d ' ' -f 8)"
+    sampleID="$(echo $line | cut -d ' ' -f 1)"
+    REGION="${CHR}:${START}-${END}"
+    OUTPUT="${OUTPUT_DIR}/${sampleID}_${CHR}.${START}.${END}"
+    samtools view ${INPUT_WGS} ${REGION} >${OUTPUT}.sam
+    # need to change this if the read lengths are not 151 or 150
+    awk '$6 !~ /151M|150M|149M|148M|150S|149S|148S/' ${OUTPUT}.sam | cut -f1,10 >${OUTPUT}.fasta
+    perl -pi -e 's/^/>/g' ${OUTPUT}.fasta
+    perl -pi -e 's/\t/\n/g' ${OUTPUT}.fasta
+    pblat -threads=28 ${REF_GRCh38}  ${OUTPUT}.fasta  ${OUTPUT}.psl
+    python3 ${BREAKPOINT_SCRIPT} ${OUTPUT}.psl ${sampleID} ${CHR} ${START} ${END} ${OUTPUT}
+    rm ${OUTPUT}.fasta
+    rm ${OUTPUT}.sam
+done < ${INPUT_DISC}.breakpointINPUT.tsv
+
+echo "job done"
+
+# Make placeholder file for snakemake pipeline
+echo "NUMT Calling Done <3" > ${OUTPUT2}_calling_finished.txt
